@@ -1,0 +1,52 @@
+# Workflow de GitHub Actions: construye una imagen Docker y busca vulnerabilidades.
+# Este archivo debe estar en .github/workflows/ para que GitHub lo reconozca.
+
+# Nombre del workflow que aparece en la pestaña Actions del repositorio.
+name: DevSecOps Pipeline
+
+# Evento que inicia la ejecución: cada push al repositorio.
+# Al no definir filtros de ramas, el workflow también se activa en otras ramas.
+on: [push]
+
+# Agrupa los trabajos que GitHub Actions debe ejecutar.
+jobs:
+  # Identificador del trabajo encargado de construir y escanear la imagen.
+  build-and-scan:
+    # Ejecuta el trabajo en una máquina virtual Ubuntu hospedada por GitHub.
+    # ubuntu-latest es una etiqueta cuya versión de Ubuntu puede cambiar.
+    runs-on: ubuntu-latest
+
+    # Los pasos se ejecutan en orden y comparten la máquina de este trabajo.
+    # Si un paso falla, los siguientes normalmente no se ejecutan.
+    steps:
+      # Descarga el código del repositorio al directorio de trabajo del runner.
+      # Así los pasos posteriores pueden acceder al Dockerfile y demás archivos.
+      # uses ejecuta una acción reutilizable; @v3 selecciona su versión principal.
+      - uses: actions/checkout@v3
+
+      # Etiqueta descriptiva del paso, visible en los registros de GitHub Actions.
+      - name: Construir Imagen
+        # run ejecuta un comando de shell en el runner.
+        # docker build construye una imagen siguiendo el Dockerfile del proyecto.
+        # -t asigna el nombre mi-app-insegura y la etiqueta latest a la imagen.
+        # latest es una etiqueta; por sí sola no garantiza que sea la más reciente.
+        # El punto (.) indica que el directorio actual es el contexto de construcción.
+        # La imagen queda en el Docker local del runner; este comando no la publica.
+        run: docker build -t mi-app-insegura:latest .
+
+      - name: Escaneo Trivy
+        # Ejecuta la acción de Trivy para buscar vulnerabilidades en la imagen.
+        # @master usa la rama master de la acción, cuyo contenido puede cambiar.
+        uses: aquasecurity/trivy-action@master
+        # with contiene los parámetros que se entregan a la acción.
+        with:
+          # Nombre y etiqueta de la imagen que se construyó en el paso anterior.
+          image-ref: 'mi-app-insegura:latest'
+          # Muestra los resultados como una tabla en los registros del paso.
+          format: 'table'
+          # Devuelve un código de salida 1 si encuentra vulnerabilidades de las
+          # severidades seleccionadas. Esto marca el paso y el trabajo como fallidos.
+          exit-code: '1'
+          # Limita los resultados a vulnerabilidades críticas y altas.
+          # Las de severidad media o baja no hacen fallar este escaneo por hallazgos.
+          severity: 'CRITICAL,HIGH'
